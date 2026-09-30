@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Map Room Cutter</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eceff3;--panel:#fff;--ink:#18212d;--mute:#5d6a7a;--line:#d3d9e1;--acc:#2f5bea;--accink:#fff;--warn:#b4531a;--canvasbg:#dfe4ea;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171e;--panel:#1b232d;--ink:#e6ebf2;--mute:#93a0b1;--line:#2d3844;--acc:#6f95ff;--accink:#0c1220;--warn:#f0a06a;--canvasbg:#0d1116}}
+:root[data-theme="dark"]{--bg:#12171e;--panel:#1b232d;--ink:#e6ebf2;--mute:#93a0b1;--line:#2d3844;--acc:#6f95ff;--accink:#0c1220;--warn:#f0a06a;--canvasbg:#0d1116}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Figtree,system-ui,sans-serif}
+h1,h2{font-family:'Bricolage Grotesque',Figtree,sans-serif;margin:0;letter-spacing:-.01em}
+h1{font-size:26px}h2{font-size:17px;margin-bottom:8px}
+header{padding:18px 20px 6px}header p{margin:2px 0 0;color:var(--mute);max-width:70ch}
+.app{display:grid;grid-template-columns:320px 1fr;gap:14px;padding:12px 20px 20px;align-items:start}
+@media(max-width:820px){.app{grid-template-columns:1fr;padding:10px 12px}}
+.side{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card.off{opacity:.5;pointer-events:none}
+.hint{color:var(--mute);font-size:13.5px;margin:0 0 10px}
+button,select,input{font:inherit;color:var(--ink)}
+button{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--acc)}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button.p{background:var(--acc);color:var(--accink);border-color:var(--acc);font-weight:600}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+label.f{display:flex;flex-direction:column;font-size:13px;color:var(--mute);gap:2px;flex:1;min-width:88px}
+input[type=number],input[type=text],select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+.stage{background:var(--canvasbg);border:1px solid var(--line);border-radius:10px;overflow:auto;height:72vh;min-height:360px;position:relative}
+.stage canvas{display:block;touch-action:none;cursor:crosshair}
+.drop{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;padding:20px;color:var(--mute)}
+.drop.drag{outline:3px dashed var(--acc);outline-offset:-12px}
+.rooms{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.rooms li{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;flex:none}
+.rooms input{padding:4px 6px}
+.rooms button{padding:3px 8px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+#out{padding:0 20px 28px}
+@media(max-width:820px){#out{padding:0 12px 24px}}
+.sheets{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px}
+.sheet{background:#fff;position:relative;box-shadow:0 1px 6px rgba(0,0,0,.25);overflow:hidden;flex:none;max-width:100%}
+.piece{position:absolute;outline:1px dashed #8a8a8a;outline-offset:0}
+.piece canvas{display:block;width:100%;height:100%}
+.warn{color:var(--warn);font-size:13.5px}
+.stat{color:var(--mute);font-size:13.5px}
+@media print{
+ @page{margin:0}
+ html,body{background:#fff}:root{padding:0}
+ header,.app,#outctl{display:none!important}
+ #out{padding:0}.sheets{display:block;margin:0}
+ .sheet{box-shadow:none;break-after:page;page-break-after:always;max-width:none!important;zoom:1!important;transform:none!important}
+ .piece{outline:.2mm dashed #999}
+}
+</style>
+</head>
+<body>
+<header>
+ <h1>Map Room Cutter</h1>
+ <p>Load a gridded battle map, teach it the grid, mark out rooms, and get the pieces packed onto A4 sheets at a true print size.</p>
+</header>
+
+<div class="app">
+ <div class="side">
+  <div class="card" id="c1">
+   <h2>1. Map image</h2>
+   <input type="file" id="file" accept="image/*">
+  </div>
+
+  <div class="card off" id="c2">
+   <h2>2. Set the grid</h2>
+   <p class="hint">Click two opposite corners of one grid square (or a block of squares — then say how many across).</p>
+   <div class="row">
+    <button id="calBtn" class="p">Pick corners</button>
+    <label class="f" style="max-width:110px">Squares across<input type="number" id="nAcross" value="1" min="1"></label>
+   </div>
+   <div class="row">
+    <label class="f">Cell size (px)<input type="number" id="cell" step="0.1" min="4"></label>
+    <label class="f">Offset X<input type="number" id="offx" step="1"></label>
+    <label class="f">Offset Y<input type="number" id="offy" step="1"></label>
+   </div>
+   <div class="stat" id="gridStat">Grid not set.</div>
+  </div>
+
+  <div class="card off" id="c3">
+   <h2>3. Mark rooms</h2>
+   <p class="hint">Drag over squares to add them to the current room. Repeat for L-shapes and odd rooms, then finish the room.</p>
+   <div class="bar">
+    <button id="eraseBtn">Erase mode</button>
+    <button id="undoBtn">Undo drag</button>
+    <button id="finBtn" class="p">Finish room</button>
+   </div>
+   <div class="stat" id="curStat">Current room: 0 squares</div>
+   <ul class="rooms" id="roomList" style="margin-top:10px"></ul>
+  </div>
+
+  <div class="card off" id="c4">
+   <h2>4. Print layout</h2>
+   <div class="row">
+    <label class="f">Square size (mm)<input type="number" id="mm" value="25.4" step="0.1" min="5"></label>
+    <label class="f">Paper<select id="orient"><option value="p">A4 portrait</option><option value="l">A4 landscape</option></select></label>
+   </div>
+   <div class="row">
+    <label class="f">Margin (mm)<input type="number" id="margin" value="10" min="0"></label>
+    <label class="f">Gap (mm)<input type="number" id="gap" value="4" min="0"></label>
+   </div>
+   <p class="hint" style="margin:0">25.4 mm = 1 inch, the standard tabletop scale.</p>
+  </div>
+ </div>
+
+ <div>
+  <div class="row" id="zoomRow" style="display:none">
+   <label class="f" style="flex-direction:row;align-items:center;gap:8px;max-width:320px">Zoom<input type="range" id="zoom" min="0.1" max="3" step="0.05" style="flex:1"></label>
+   <span class="stat" id="tip"></span>
+  </div>
+  <div class="stage" id="stage">
+   <div class="drop" id="drop"><strong>Drop a map image here</strong><span>or use the file picker on the left</span></div>
+   <canvas id="cv" style="display:none"></canvas>
+  </div>
+ </div>
+</div>
+
+<section id="out">
+ <div id="outctl" style="display:none">
+  <h2>Print sheets</h2>
+  <div class="bar">
+   <button class="p" id="pdfBtn">Download PDF</button> <button id="printBtn">Print</button>
+   <span class="stat" id="sheetStat"></span>
+  </div>
+  <div class="warn" id="sheetWarn"></div>
+  <p class="hint">If you print from a PDF viewer or dialog, choose A4 and scale 100% (not “fit to page”).</p>
+ </div>
+ <div class="sheets" id="sheets"></div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const COLORS=['#e4572e','#2a9d8f','#e9a820','#7b5ea7','#1d8fd1','#c2417c','#5b8c2a','#8c5a3c'];
+let img=null,mode=null,pts=[],cell=0,ox=0,oy=0,erase=false;
+let lastLayout=null,rooms=[],cur=new Set(),hist=[],drag=null,zoom=1;
+
+function key(i,j){return i+','+j}
+function cellAt(x,y){return [Math.floor((x-ox)/cell),Math.floor((y-oy)/cell)]}
+function toImg(e){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height]}
+function enable(ids){ids.forEach(i=>$(i).classList.remove('off'))}
+
+// ---------- load ----------
+function loadFile(f){
+ if(!f||!f.type.startsWith('image/'))return;
+ const url=URL.createObjectURL(f),im=new Image();
+ im.onload=()=>{
+  img=im;cv.width=im.naturalWidth;cv.height=im.naturalHeight;
+  cv.style.display='block';$('drop').style.display='none';$('zoomRow').style.display='flex';
+  cell=0;pts=[];rooms=[];cur=new Set();hist=[];mode=null;
+  const z=Math.min(1,($('stage').clientWidth-4)/im.naturalWidth);setZoom(z);
+  enable(['c2']);['c3','c4'].forEach(i=>$(i).classList.add('off'));
+  $('gridStat').textContent='Grid not set.';$('tip').textContent='';
+  refresh();
+ };
+ im.src=url;
+}
+$('file').onchange=e=>loadFile(e.target.files[0]);
+const dz=$('stage');
+dz.ondragover=e=>{e.preventDefault();$('drop').classList.add('drag')};
+dz.ondragleave=()=>$('drop').classList.remove('drag');
+dz.ondrop=e=>{e.preventDefault();$('drop').classList.remove('drag');loadFile(e.dataTransfer.files[0])};
+
+function setZoom(z){zoom=z;$('zoom').value=z;cv.style.width=Math.round(cv.width*z)+'px';cv.style.height=Math.round(cv.height*z)+'px'}
+$('zoom').oninput=e=>setZoom(+e.target.value);
+
+// ---------- calibrate ----------
+$('calBtn').onclick=()=>{mode='cal';pts=[];$('tip').textContent='Click the first corner.';draw()};
+function applyCal(){
+ const [a,b]=pts,n=Math.max(1,+$('nAcross').value||1);
+ const dx=Math.abs(b[0]-a[0]),dy=Math.abs(b[1]-a[1]);
+ if(dx<4||dy<4){$('tip').textContent='Corners too close — try again.';pts=[];return}
+ setGrid((dx+dy)/2/n,Math.min(a[0],b[0]),Math.min(a[1],b[1]));
+ mode='rooms';$('tip').textContent='Drag over squares to build a room.';
+ enable(['c3','c4']);
+}
+function setGrid(c,x,y){
+ cell=c;ox=((x%c)+c)%c;oy=((y%c)+c)%c;
+ $('cell').value=c.toFixed(1);$('offx').value=ox.toFixed(0);$('offy').value=oy.toFixed(0);
+ $('gridStat').textContent=`Grid set: ${c.toFixed(1)} px per square, about ${Math.floor(cv.width/c)} × ${Math.floor(cv.height/c)} squares.`;
+}
+['cell','offx','offy'].forEach(id=>$(id).oninput=()=>{
+ const c=+$('cell').value;if(c<4)return;cell=c;ox=+$('offx').value||0;oy=+$('offy').value||0;
+ if(!mode){mode='rooms';enable(['c3','c4'])}
+ refresh();
+});
+
+// ---------- draw ----------
+function draw(){
+ if(!img)return;
+ ctx.clearRect(0,0,cv.width,cv.height);ctx.drawImage(img,0,0);
+ const lw=Math.max(1,1/zoom);
+ if(cell){
+  ctx.strokeStyle='rgba(47,91,234,.35)';ctx.lineWidth=lw;ctx.beginPath();
+  for(let x=ox;x<cv.width;x+=cell){ctx.moveTo(x,0);ctx.lineTo(x,cv.height)}
+  for(let y=oy;y<cv.height;y+=cell){ctx.moveTo(0,y);ctx.lineTo(cv.width,y)}
+  ctx.stroke();
+  rooms.forEach((r,k)=>paintSet(r.cells,COLORS[k%COLORS.length],.32,r.name));
+  paintSet(cur,'#2f5bea',.38);
+  if(drag){
+   const [a,b]=[drag.a,drag.b],i0=Math.min(a[0],b[0]),i1=Math.max(a[0],b[0]),j0=Math.min(a[1],b[1]),j1=Math.max(a[1],b[1]);
+   ctx.fillStyle=erase?'rgba(220,40,40,.35)':'rgba(47,91,234,.3)';
+   ctx.fillRect(ox+i0*cell,oy+j0*cell,(i1-i0+1)*cell,(j1-j0+1)*cell);
+  }
+ }
+ if(mode==='cal'&&pts.length){
+  ctx.fillStyle='#e4572e';pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],Math.max(4,5/zoom),0,7);ctx.fill()});
+  if(pts.length===2){ctx.strokeStyle='#e4572e';ctx.lineWidth=lw*2;ctx.strokeRect(pts[0][0],pts[0][1],pts[1][0]-pts[0][0],pts[1][1]-pts[0][1])}
+ }
+}
+function paintSet(set,col,alpha,label){
+ ctx.fillStyle=col;ctx.globalAlpha=alpha;
+ let minI=1e9,minJ=1e9;
+ set.forEach(k=>{const [i,j]=k.split(',').map(Number);ctx.fillRect(ox+i*cell,oy+j*cell,cell,cell);if(j<minJ||(j===minJ&&i<minI)){minJ=j;minI=i}});
+ ctx.globalAlpha=1;
+ if(label&&set.size){ctx.fillStyle='#000';ctx.font=`600 ${Math.max(12,cell*.32)}px Figtree,sans-serif`;ctx.textBaseline='top';ctx.fillText(label,ox+minI*cell+4,oy+minJ*cell+4)}
+}
+
+// ---------- pointer ----------
+cv.addEventListener('pointerdown',e=>{
+ if(!img)return;const p=toImg(e);
+ if(mode==='cal'){pts.push(p);if(pts.length===2)applyCal();else $('tip').textContent='Now click the opposite corner.';refresh();return}
+ if(mode==='rooms'&&cell){cv.setPointerCapture(e.pointerId);const c=cellAt(...p);drag={a:c,b:c,rm:erase||e.shiftKey};draw()}
+});
+cv.addEventListener('pointermove',e=>{if(drag){drag.b=cellAt(...toImg(e));draw()}});
+cv.addEventListener('pointerup',()=>{
+ if(!drag)return;
+ hist.push(new Set(cur));
+ const {a,b,rm}=drag,i0=Math.min(a[0],b[0]),i1=Math.max(a[0],b[0]),j0=Math.min(a[1],b[1]),j1=Math.max(a[1],b[1]);
+ for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){rm?cur.delete(key(i,j)):cur.add(key(i,j))}
+ drag=null;refresh();
+});
+$('eraseBtn').onclick=()=>{erase=!erase;$('eraseBtn').classList.toggle('on',erase)};
+$('undoBtn').onclick=()=>{if(hist.length){cur=hist.pop();refresh()}};
+$('finBtn').onclick=()=>{
+ if(!cur.size)return;
+ rooms.push({name:'Room '+(rooms.length+1),cells:cur});cur=new Set();hist=[];refresh();
+};
+
+function refresh(){
+ draw();
+ $('curStat').textContent=`Current room: ${cur.size} square${cur.size===1?'':'s'}`;
+ const ul=$('roomList');ul.innerHTML='';
+ rooms.forEach((r,k)=>{
+  const li=document.createElement('li');
+  li.innerHTML=`<span class="sw" style="background:${COLORS[k%COLORS.length]}"></span>`;
+  const inp=document.createElement('input');inp.type='text';inp.value=r.name;inp.setAttribute('aria-label','Room name');
+  inp.oninput=()=>{r.name=inp.value;draw()};
+  const del=document.createElement('button');del.textContent='Remove';
+  del.onclick=()=>{rooms.splice(k,1);refresh()};
+  const edit=document.createElement('button');edit.textContent='Edit';edit.title='Move back to the current room to change it';
+  edit.onclick=()=>{if(cur.size&&!confirm('Replace the current unfinished room?'))return;cur=new Set(r.cells);rooms.splice(k,1);hist=[];refresh()};
+  li.append(inp,edit,del);ul.append(li);
+ });
+ renderSheets();
+}
+
+// ---------- crop + layout ----------
+function cropRoom(r){
+ let i0=1e9,i1=-1e9,j0=1e9,j1=-1e9;
+ r.cells.forEach(k=>{const [i,j]=k.split(',').map(Number);i0=Math.min(i0,i);i1=Math.max(i1,i);j0=Math.min(j0,j);j1=Math.max(j1,j)});
+ const cols=i1-i0+1,rows=j1-j0+1,S=Math.max(1,Math.round(cell)),c=document.createElement('canvas');
+ c.width=cols*S;c.height=rows*S;const g=c.getContext('2d');
+ g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);
+ r.cells.forEach(k=>{
+  const [i,j]=k.split(',').map(Number);
+  g.drawImage(img,ox+i*cell,oy+j*cell,cell,cell,(i-i0)*S,(j-j0)*S,S,S);
+ });
+ return {c,cols,rows,name:r.name,S,i0,j0,cells:r.cells};
+}
+function renderSheets(){
+ const box=$('sheets');box.innerHTML='';
+ const ctl=$('outctl');
+ if(!rooms.length||!cell){ctl.style.display='none';return}
+ ctl.style.display='block';
+ const mm=+$('mm').value||25.4,land=$('orient').value==='l',m=Math.max(0,+$('margin').value||0),gap=Math.max(0,+$('gap').value||0);
+ const W=land?297:210,H=land?210:297,uw=W-2*m,uh=H-2*m;
+ // dynamic @page size
+ let st=$('pagestyle');if(!st){st=document.createElement('style');st.id='pagestyle';document.head.append(st)}
+ st.textContent=`@media print{@page{size:A4 ${land?'landscape':'portrait'};margin:0}.sheet{width:${W}mm!important;height:${H}mm!important}}`;
+ const items=[];
+ const mk=(c,cols,rows,name)=>{const w=cols*mm,h=rows*mm,s=Math.min(1,uw/w,uh/h);return {c,name,w:w*s,h:h*s,shrunk:s<1}};
+ const rot=c=>{const o=document.createElement('canvas');o.width=c.height;o.height=c.width;const g=o.getContext('2d');g.translate(o.width,0);g.rotate(Math.PI/2);g.drawImage(c,0,0);return o};
+ rooms.forEach(r=>{
+  const p=cropRoom(r),w=p.cols*mm,h=p.rows*mm;
+  if(w<=uw+.01&&h<=uh+.01)items.push(mk(p.c,p.cols,p.rows,p.name));
+  else if(h<=uw+.01&&w<=uh+.01)items.push(mk(rot(p.c),p.rows,p.cols,p.name));
+  else{
+   const mC=Math.max(1,Math.floor(uw/mm+.001)),mR=Math.max(1,Math.floor(uh/mm+.001)),S=p.S;
+   const nC=Math.ceil(p.cols/mC),nR=Math.ceil(p.rows/mR);
+   for(let cj=0;cj<nR;cj++)for(let ci=0;ci<nC;ci++){
+    const a=ci*mC,b=cj*mR,tc=Math.min(mC,p.cols-a),tr=Math.min(mR,p.rows-b);
+    let has=false;p.cells.forEach(k=>{if(has)return;const [i,j]=k.split(',').map(Number);if(i-p.i0>=a&&i-p.i0<a+tc&&j-p.j0>=b&&j-p.j0<b+tr)has=true});
+    if(!has)continue;
+    const c=document.createElement('canvas');c.width=tc*S;c.height=tr*S;const g=c.getContext('2d');
+    g.drawImage(p.c,a*S,b*S,tc*S,tr*S,0,0,tc*S,tr*S);
+    const lab=`${p.name}  r${cj+1} c${ci+1}`,fs=Math.max(10,S*.16);
+    g.font=`600 ${fs}px sans-serif`;g.textBaseline='top';const tw=g.measureText(lab).width;
+    g.fillStyle='rgba(255,255,255,.9)';g.fillRect(0,0,tw+8,fs+6);g.fillStyle='#333';g.fillText(lab,4,3);
+    items.push(mk(c,tc,tr,lab));
+   }
+  }
+ });
+ items.sort((a,b)=>b.h-a.h);
+ const pages=[];let pg=null,x=0,y=0,sh=0;
+ const newPage=()=>{pg={items:[]};pages.push(pg);x=0;y=0;sh=0};
+ newPage();
+ items.forEach(it=>{
+  if(x>0&&x+it.w>uw+.01){x=0;y+=sh+gap;sh=0}
+  if(y>0&&y+it.h>uh+.01){newPage()}
+  pg.items.push({it,x:m+x,y:m+y});x+=it.w+gap;sh=Math.max(sh,it.h);
+ });
+ lastLayout={W,H,pages,m};
+ const PX=3.78; // css px per mm for preview
+ const avail=Math.min(window.innerWidth-40,W*PX);
+ pages.forEach((p,n)=>{
+  const s=document.createElement('div');s.className='sheet';
+  s.style.width=W+'mm';s.style.height=H+'mm';
+  p.items.forEach(({it,x,y})=>{
+   const d=document.createElement('div');d.className='piece';
+   d.style.cssText=`left:${x}mm;top:${y}mm;width:${it.w}mm;height:${it.h}mm`;
+   d.append(it.c);s.append(d);
+  });
+  // scale preview on narrow screens only (print undoes it)
+  if(avail<W*PX){s.style.zoom=avail/(W*PX)}
+  box.append(s);
+ });
+ $('sheetStat').textContent=`${rooms.length} room${rooms.length===1?'':'s'} on ${pages.length} sheet${pages.length===1?'':'s'}`;
+ const sh2=items.filter(i=>i.shrunk).map(i=>i.name);
+ const tiled=items.filter(i=>/ r\d+ c\d+$/.test(i.name)).length;
+ $('sheetWarn').textContent=(tiled?`Rooms wider or taller than a sheet are split along grid lines into labelled parts (r = row, c = column) that you tape together. `:'')+(sh2.length?`Squares are larger than the page at this size, so shrunk to fit: ${sh2.join(', ')}.`:'');
+}
+['mm','orient','margin','gap'].forEach(id=>$(id).oninput=renderSheets);
+$('printBtn').onclick=()=>{try{window.print()}catch(e){$('sheetWarn').textContent='Printing is blocked in this view. Use Download PDF and print the file.'}};
+$('pdfBtn').onclick=async()=>{
+ const btn=$('pdfBtn'),warn=$('sheetWarn'),old=btn.textContent;
+ if(!lastLayout||!window.jspdf){warn.textContent='PDF library did not load. Check your connection and reload.';return}
+ btn.disabled=true;btn.textContent='Building PDF…';
+ try{
+  let dl=null;try{dl=window.claude?await claude.use('downloads'):null}catch(e){}
+  const {W,H,pages}=lastLayout,{jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:W>H?'l':'p',unit:'mm',format:'a4'});
+  pages.forEach((p,n)=>{
+   if(n)pdf.addPage('a4',W>H?'l':'p');
+   p.items.forEach(({it,x,y})=>{
+    pdf.addImage(it.c.toDataURL('image/jpeg',.92),'JPEG',x,y,it.w,it.h);
+    pdf.setDrawColor(140);pdf.setLineWidth(.2);pdf.setLineDashPattern([1.2,1.2],0);pdf.rect(x,y,it.w,it.h);
+   });
+  });
+  const blob=pdf.output('blob');
+  if(dl)await dl.save({filename:'map-rooms.pdf',data:blob});
+  else{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='map-rooms.pdf';document.body.append(a);a.click();a.remove()}
+ }catch(e){if(!e||e.code!=='declined')warn.textContent='Could not save the PDF'+(e&&e.message?': '+e.message:'.')}
+ finally{btn.disabled=false;btn.textContent=old}
+};
+window.addEventListener('resize',()=>{if(rooms.length)renderSheets()});
+</script>
+</body>
+</html>
